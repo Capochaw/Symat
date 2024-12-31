@@ -1,5 +1,6 @@
 # ![](https://github.com/Capochaw/Symat/blob/main/2024-12-31%3D163410.png)
-(INCOMPLETE) A symbolic math WYSIWYG infinity board
+(INCOMPLETE) A symbolic math WYSIWYG infinity board.
+
 Thank you so much to GUST for [porting the TeX font for unicode](https://www.gust.org.pl/projects/e-foundry/lm-math).
 # Compile
 You must have ```SDL2``` installed on your PC.
