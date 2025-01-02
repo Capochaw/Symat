@@ -11,8 +11,8 @@ bool GetErrors(Symat * symat,char * config){
 		printf("ErrorSDL: %s\n",SDL_GetError());
 		return true;
 	}
-	symat->window = SDL_CreateWindow("Symat",1200,
-			40, 700,300,SDL_WINDOW_SHOWN);
+	symat->window = SDL_CreateWindow("Symat",1000,
+			40, 900,300,SDL_WINDOW_SHOWN);
 			// SCREEN_WIDTH,
 			// SCREEN_HEIGHT,
 			// SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
@@ -25,8 +25,12 @@ bool GetErrors(Symat * symat,char * config){
 		mainfont = TTF_OpenFont("font.otf",FONTSIZE);
 		bigopfont = TTF_OpenFont("font.otf",BIGOPFONTSIZE);
 		if(mainfont == NULL || bigopfont == NULL){
-			printf("error, no hay fuente\n");
-			exit(1);
+			mainfont = TTF_OpenFont("font.ttf",FONTSIZE);
+			bigopfont = TTF_OpenFont("font.ttf",BIGOPFONTSIZE);
+			if(mainfont == NULL || bigopfont == NULL){
+				printf("error, no hay fuente\n");
+				exit(1);
+			}
 		}
 		symat->screenSurface = SDL_GetWindowSurface(symat->window);
 		SDL_GetWindowSize(symat->window, symat->screenx, symat->screeny);
@@ -59,29 +63,44 @@ void initSymat(Symat * symat, char * config){
 
 // El span de y tiene que ser en funcion del ultimo token que este tiene.
 void drawBuffer(Symat * symat, Buffer * buffer,float factor,int spanx,int spany,int * movex,int *prevhmax,bool firsttime){
-	float dimfactor = (3*factor)/5;
+	if(buffer == NULL){
+		return;
+	}
+	buffer->sizex =0;
+	buffer->sizey =0;
+	buffer->posx =0;
+	buffer->posy =0;
+	float dimfactor = (4*factor)/5;
 	int charx, chary;
 	int *supx = malloc(sizeof(int));
 	int *subx = malloc(sizeof(int));
 	*supx = 0;
 	*subx = 0;
-	SDL_Surface * chartest = TTF_RenderUTF8_Solid(mainfont,buffer->tokens[buffer->tokensize-1].token,color);
-	charx = chartest->w;
-	chary = chartest->h;
-	SDL_FreeSurface(chartest);
-	drawLine(symat,buffer,buffer->tokens,buffer->tokensize,factor,spanx,spany,buffer->sizey,movex,prevhmax);
-	printf("spanx + buffer->sizex = %d\n",spanx + buffer->sizex);
-	if(buffer->suptext != NULL)
-		drawBuffer(symat,buffer->suptext,dimfactor,spanx+buffer->sizex,spany+((-1)*chary)/6,supx,NULL,false);
-	if(buffer->subtext != NULL)
-		drawBuffer(symat,buffer->subtext,dimfactor,spanx+buffer->sizex,spany+(5*chary)/6,subx,NULL,false);
-	if(*supx > *subx){
-		*movex += *supx;
-	} else {
-		*movex += *subx;
+	if(buffer->tokens != NULL){
+		SDL_Surface * chartest = TTF_RenderUTF8_Solid(mainfont,buffer->tokens[buffer->tokensize-1].token,color);
+		if(chartest != NULL){
+			charx = factor*chartest->w;
+			chary = factor*chartest->h;
+			SDL_FreeSurface(chartest);
+		} else {
+			charx = 0;
+			chary = 0;
+		}
 	}
-	if(buffer->next != NULL)
+	// TODO: Añadir condicionales sobre bigop
+	drawLine(symat,buffer,buffer->tokens,buffer->tokensize,factor,spanx,spany,buffer->sizey,movex,prevhmax);
+	if(buffer->suptext != NULL)
+		drawBuffer(symat,buffer->suptext,dimfactor,spanx+buffer->sizex-factor*3,spany+((-1)*chary)/3,supx,NULL,false);
+	if(buffer->subtext != NULL)
+		drawBuffer(symat,buffer->subtext,dimfactor,spanx+buffer->sizex-factor*3,spany+(chary)/3,subx,NULL,false);
+	if(*supx > *subx){
+		*movex += buffer->sizex + *supx;
+	} else {
+		*movex += buffer->sizex + *subx;
+	}
+	if(buffer->next != NULL){
 		drawBuffer(symat,buffer->next,factor,spanx+*movex,spany,movex,prevhmax,false);
+	}
 	free(subx);
 	free(supx);
 }

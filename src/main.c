@@ -34,13 +34,15 @@ int main(int argc, char * argv[]){
 			}
 		}
 
-		strcpy(symat.buffer[0].parsetext,"int_C^^f(z)dz");
+		//strcpy(symat.buffer[0].parsetext,"sum_k = 0^^^n__ f(k)");
 		printf("%s\n",symat.buffer[0].parsetext);
 		readTokens(&symat,&symat.buffer[0]);
-			SDL_RenderPresent(symat.renderer);
 			SDL_SetRenderDrawColor(symat.renderer,255,255,255,255);
 			SDL_RenderClear(symat.renderer);
-		drawBuffer(&symat,&symat.buffer[0],1,100,100,symat.movex,symat.prevhmax,true);
+			*symat.movex = 0;
+			*symat.prevhmax = 0;
+			drawBuffer(&symat,&symat.buffer[0],1,100,100,symat.movex,symat.prevhmax,true);
+			SDL_RenderPresent(symat.renderer);
 		SDL_Delay(60);
 	}
 	return 0;

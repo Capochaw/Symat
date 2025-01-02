@@ -4,6 +4,10 @@ Buffer * setBuffer(){
 	Buffer * ret;
 	ret = malloc(sizeof(Buffer));
 	ret->parsetext = malloc(sizeof(uint8_t));
+	ret->posx = 0;
+	ret->posy = 0;
+	ret->spanx = 0;
+	ret->spany = 0;
 	ret->sizex = 0;
 	ret->sizey = 0;
 	ret->tokensize = 0;
@@ -17,6 +21,10 @@ Buffer * setBuffer(){
 Buffer initBuffer(){
 	Buffer ret;
 	ret.parsetext = malloc(sizeof(uint8_t));
+	ret.posx = 0;
+	ret.posy = 0;
+	ret.spanx = 0;
+	ret.spany = 0;
 	ret.sizex = 0;
 	ret.sizey = 0;
 	ret.tokensize = 0;
@@ -65,10 +73,15 @@ Token getTokenFlags(char * s,int * pos){
 
 uint8_t * cutParse(uint8_t * source, int i){
 	//int set = strlen(source) - (i+1);
-	uint8_t * ret = malloc(sizeof(strlen(source)-(i+1)));
-	for(int p = i; p < strlen(source);p++){
+	uint8_t * ret = malloc(sizeof(uint8_t) * (strlen(source) -(i)));
+	if(ret == NULL)
+		return NULL;
+	int p = i;
+	while(source[p] != '\0'){
 		ret[p-i] = source[p];
+		p++;
 	}
+	ret[p-i] = '\0';
 	return ret;
 }
 
@@ -86,6 +99,35 @@ int getNumTokens(char * config){
 	fclose(file);
 	return numtokens;
 }
+void freeBuffers(Buffer *buffer) {
+    if (buffer == NULL) {
+        return; // Evita procesar un puntero nulo.
+    }
+
+    // Libera los nodos dependientes primero.
+    if (buffer->next != NULL) {
+        freeBuffers(buffer->next);
+    }
+    if (buffer->subtext != NULL) {
+        freeBuffers(buffer->subtext);
+    }
+    if (buffer->suptext != NULL) {
+        freeBuffers(buffer->suptext);
+    }
+
+    // Libera los recursos propios del nodo actual.
+    if (buffer->parsetext != NULL) {
+        free(buffer->parsetext);
+		buffer->parsetext = NULL;
+    }
+    if (buffer->tokens != NULL) {
+        free(buffer->tokens);
+		buffer->parsetext = NULL;
+    }
+
+    // Finalmente, libera el nodo actual.
+    free(buffer);
+}
 
 //FIXME: No interpreta bien los cambios de dimensiones
 uint8_t * getBbparse(Symat * symat,uint8_t * source, bool issup,int *retpos){
@@ -93,45 +135,69 @@ uint8_t * getBbparse(Symat * symat,uint8_t * source, bool issup,int *retpos){
 	//si ~issup, termina cuando encuentra ^^
 	uint8_t * ret = malloc(sizeof(uint8_t));
 	bool broke = false;
-	int size = 1, move = *retpos+1,dim = 0;
+	int size = 1, move ,dim = 0, cant = 0;
+	if(retpos != NULL){
+		move = *retpos+1;
+	} else {
+		move = 1;
+	}
 	if(issup){
 		dim += 1;
-		while(source[move] != '\0' && broke == false){
-			ret = realloc(ret,sizeof(uint8_t)*size);
+		while(source[move+size-1] != '\0' && broke == false){
+			ret = realloc(ret,sizeof(uint8_t)*(size+1));
 			ret[size-1] = source[move+size-1];
+			ret[size] = '\0';
 			if(ret[size-1] == '^' && ret[size-1] != ret[size-2]){
 				dim +=1;
 			}
-			if(ret[size-1] == '_' && ret[size-1] != ret[size-2]){
+			if(ret[size-1] == '_' && ret[size-1] == ret[size-2]){
 				dim -=1;
+				cant++;
 			}
 			if(ret[size-1] == ret[size-2] && ret[size-1] == '_' && size >= 1 && dim == 0){
 				broke = true;
-				ret[size-2] = '\0';
-				*retpos += size+1;
+				if(cant%2 == 0){
+					ret[size-1] = '\0';
+				} else {
+					ret[size-2] = '\0';
+				}
+				if(retpos != NULL)
+					*retpos += size+1;
 			}
 			size += 1;
 		}
 	} else {
 		dim -= 1;
-		while(source[move] != '\0' && broke == false){
+		while(source[move+size-1] != '\0' && broke == false){
 			ret = realloc(ret,sizeof(uint8_t)*size);
 			ret[size-1] = source[move+size-1];
-			if(ret[size-1] == '^' && ret[size-1] != ret[size-2]){
+			if(ret[size-1] == '^' && ret[size-1] == ret[size-2]){
 				dim +=1;
+				cant++;
 			}
 			if(ret[size-1] == '_' && ret[size-1] != ret[size-2]){
 				dim -=1;
 			}
 			if(ret[size-1] == ret[size-2] && ret[size-1] == '^' && size >= 1 && dim == 0){
 				broke = true;
-				ret[size-2] = '\0';
-				*retpos += size+1;
+				if(cant%2 == 0){
+					ret[size-1] = '\0';
+				} else {
+					ret[size-2] = '\0';
+				}
+				if(retpos != NULL)
+					*retpos += size+1;
 			}
 			size += 1;
 		}
-		printf("%s\n",ret);
 	}
+	if(cant%2 == 0){
+		ret[size-1] = '\0';
+	} else {
+		ret[size-2] = '\0';
+	}
+	if(retpos != NULL && !broke)
+		*retpos += size+1;
 	return ret;
 }
 
@@ -220,34 +286,40 @@ Token auxToken(uint8_t * text){
 	return ret;
 }
 
-int isToken(const uint8_t * set, const uint8_t * reset, Token * tokens, int numtokens,bool * isonlycomp){
-	int pos = -1, step = 0, red = 0;
-	uint8_t * val = malloc(sizeof(char) * strlen(set) + sizeof(char) * strlen(reset));
-	*isonlycomp = true;
-	if(strcmp(set,"") != 0){
-		strcpy(val,set);
-		strcat(val,reset);
-		*isonlycomp = false;
-	} else {
-		strcpy(val,reset);
+uint8_t * copyUntilPointer(uint8_t * tocopy, uint8_t * pointer){
+	uint8_t * ret = malloc(sizeof(uint8_t) * strlen(tocopy));
+	int i = 0;
+	while(tocopy[i] != '\0' && (&tocopy[i] != pointer)){
+		ret[i] = tocopy[i];
 	}
-	for(int i = 0; i < strlen(val); i++){
-		if(val[i] != ' '){
-			val[step] = val[i];
-			step++;
-		} else {
-			red -=1;
+	ret[i] = '\0';
+	return ret;
+}
+
+//TODO: OPTIMIZAR
+int isToken(uint8_t * prev, uint8_t * comp, Token * tokens, int numtokens){
+	int ret = -1;
+	bool nobreak = true;
+	uint8_t * move = malloc(sizeof(uint8_t) * (strlen(comp)+1));
+	for(int i = 0 ; i < strlen(comp) && nobreak; i++){
+		for(int p = i; p < strlen(comp); p++){
+			move[p-i] = comp[p];
+		}
+		move[strlen(comp)-i] = '\0';
+		for(int p = 0; p < numtokens; p++){
+			if(strcmp(move,tokens[p].chara) == 0){
+				ret = p;
+				for(int q = 0; q < strlen(comp)-strlen(move);q++){
+					prev[q] = comp[q];
+				}
+				strcpy(comp,move);
+				nobreak = false;
+				break;
+			}
 		}
 	}
-	val[step + red] = '\0';
-	
-	for(int i = 0; i < numtokens; i++){
-		if(strcmp(val,tokens[i].chara) == 0){
-			pos = i;
-			break;
-		}
-	}
-	return pos;
+	free(move);
+	return ret;
 }
 
 void removeLastCharacter(uint8_t *set) {
@@ -288,126 +360,106 @@ float getfactor(char * num){
 //En una palabra se analiza de adelante a atras. Si encuentra un token, separa la parte del token
 //y genera el token auxiliar atras de el token correcto.
 void readTokens(Symat * symat, Buffer * dest){
+	if(dest != NULL){
+		free(dest->tokens);
+		dest->tokens = NULL;
+		dest->sizex = 0;
+		dest->sizey = 0;
+		dest->tokensize = 0;
+		if(dest->next != NULL)
+			freeBuffers(dest->next);
+			dest->next = NULL;
+		if(dest->subtext != NULL)
+			freeBuffers(dest->subtext);
+			dest->subtext = NULL;
+		if(dest->suptext != NULL)
+			freeBuffers(dest->suptext);
+			dest->subtext = NULL;
+	}
 	uint8_t * source = dest->parsetext;
 	int p = 0,s = 0,pos = 0;
-	bool isonlycomp = true;
-	uint8_t comp[64] = "";
+	bool hastokenprev = false,isaux = false;
 	uint8_t prev[64] = "";
+	uint8_t comp[64] = "";
 	int tokenpos = 0;
 	for(int i = 0; source[i] != '\0'; i++){
 		comp[p] = source[i];
 		comp[p+1] = '\0';
-		tokenpos = isToken(prev,comp,symat->tokens,symat->numtokens,&isonlycomp);
-		if(existToken(prev,comp,symat->tokens,symat->numtokens) == true && tokenpos != -1){
-			if((symat->tokens[tokenpos].flags & MAKESUP) == MAKESUP){
-				dest->suptext = setBuffer();
-				dest->suptext->parsetext = getBbparse(symat,source,true,&i);
-				readTokens(symat,dest->suptext);
+		p++;
+		tokenpos = isToken(prev,comp,symat->tokens,symat->numtokens);
+		if(tokenpos != -1){
+			if((symat->tokens[tokenpos].flags & MAKESUB) == MAKESUB || (symat->tokens[tokenpos].flags & MAKESUP) == MAKESUP){
+				if((symat->tokens[tokenpos].flags & MAKESUB) == MAKESUB){
+					dest->subtext = setBuffer();
+					dest->subtext->parsetext = getBbparse(symat,source,false,&i);
+					readTokens(symat,dest->subtext);
+					strcpy(prev,"");
+					comp[0] = source[i];
+					comp[1] = '\0';
+					int newtokenpos = isToken(prev,comp,symat->tokens,symat->numtokens);
+					if((symat->tokens[newtokenpos].flags & MAKESUP) == MAKESUP){
+						dest->suptext = setBuffer();
+						dest->suptext->parsetext = getBbparse(symat,source,true,&i);
+						if(dest->suptext->parsetext != NULL)
+							readTokens(symat,dest->suptext);
+					}
+				}
+				if((symat->tokens[tokenpos].flags & MAKESUP) == MAKESUP){
+					dest->subtext = setBuffer();
+					dest->subtext->parsetext = getBbparse(symat,source,true,&i);
+					readTokens(symat,dest->subtext);
+					strcpy(prev,"");
+					comp[0] = source[i];
+					comp[1] = '\0';
+					int newtokenpos = isToken(prev,comp,symat->tokens,symat->numtokens);
+					if((symat->tokens[newtokenpos].flags & MAKESUB) == MAKESUB){
+						dest->subtext = setBuffer();
+						dest->subtext->parsetext = getBbparse(symat,source,false,&i);
+						if(dest->subtext->parsetext != NULL)
+							readTokens(symat,dest->subtext);
+					}
+						//FIXME: Eliminar mallocs hechos
+				}
 				dest->next = setBuffer();
 				dest->next->parsetext = cutParse(source,i);
-				//FIXME: Eliminar mallocs hechos
-				readTokens(symat,dest->next);
+				if(dest->next->parsetext != NULL)
+					readTokens(symat,dest->next);
 				break;
 			}
-			if((symat->tokens[tokenpos].flags & MAKESUB) == MAKESUB){
-				dest->subtext = setBuffer();
-				dest->subtext->parsetext = getBbparse(symat,source,false,&i);
-				readTokens(symat,dest->subtext);
-				dest->next = setBuffer();
-				dest->next->parsetext = cutParse(source,i);
-				//FIXME: Eliminar mallocs hechos
-				readTokens(symat,dest->next);
-				break;
-			}
-			//FIXME:: No hace bien las asignaciones a tokensize
 			if(dest->tokens == NULL){
 				dest->tokens = malloc(sizeof(Token));
 				dest->tokens[0] = symat->tokens[tokenpos];
 				pos+=1;
 				dest->tokensize = pos;
-				p = -1;
+				p = 0;
 				comp[0] = '\0';
 			} else {
-				pos+=1;
-				dest->tokens = realloc(dest->tokens,sizeof(Token)*(pos+1));
+				if(strlen(comp) <= 1){
+					pos+=1;
+					dest->tokens = realloc(dest->tokens,sizeof(Token) * (pos));
+				}
 				dest->tokens[pos-1] = symat->tokens[tokenpos];
-				dest->tokensize = pos;
-				p = -1;
+				p = 0;
 				comp[0] = '\0';
 			}
-		} else if (strstr(comp, "  ") != NULL){
-			if(dest->tokens == NULL){
-				dest->tokens = malloc(sizeof(Token));
-				removeLastCharacter(comp);
-				dest->tokens[0] = auxToken(comp);
-				strcpy(comp,"");
-				strcpy(prev,"");
-				dest->tokensize = pos;
-				pos+=1;
-				p = -1;
-			} else {
-				dest->tokens = realloc(dest->tokens,sizeof(Token)*(pos+1));
-				pos+=1;
-				removeLastCharacter(comp);
-				dest->tokens[pos-1] = auxToken(comp);
-				dest->tokensize = pos;
-				strcpy(comp,"");
-				strcpy(prev,"");
-				p = -1;
-			}
-		} else if (strstr(comp, "  ") == NULL){
+			hastokenprev = true;
+		} else {
 			if(dest->tokens == NULL){
 				dest->tokens = malloc(sizeof(Token));
 				dest->tokens[0] = auxToken(comp);
+				pos+=1;
 			} else {
-				//pos+=1;
-				dest->tokens = realloc(dest->tokens,sizeof(Token)*(pos+1));
-				dest->tokens[pos] = auxToken(comp);
-				dest->tokensize = pos;
+				if(hastokenprev){
+					pos+=1;
+					dest->tokens = realloc(dest->tokens,sizeof(Token) * (pos));
+					dest->tokens[pos-1] = auxToken(comp);
+					hastokenprev = false;
+				} else {
+					dest->tokens[pos-1] = auxToken(comp);
+				}
+				isaux = true;
 			}
 		}
-		p++;
+	dest->tokensize = pos;
 	}
 }
-
-void updateBuffer(Token *dest,int destlen, Buffer *origin, Token * tokens){
-	bool istoken = false;
-	while(!istoken){
-	}
-	// *dest es un array de punteros a tokens que existen. Si no existe el token, entonces crear uno con
-	// el texto normal. Cuando se reemplaza ese valor de ese token, liberar la memoria y hacer el nuevo token.
-}
-
-			/*
-			if(isonlycomp){
-				printf("%d\n",tokenpos);
-				dest->tokens[s] = symat->tokens[tokenpos];
-				strcpy(prev,comp);
-				strcpy(comp,"");
-				s++;
-				p = 0;
-				continue;
-			} else {
-				printf("%d\n",tokenpos);
-				s -= 1;
-				dest->tokens[s] = symat->tokens[tokenpos];
-				strcpy(prev,comp);
-				strcpy(comp,"");
-				s++;
-				p = 0;
-				continue;
-			}
-		} else
-			removeLastCharacter(comp);
-			dest->tokens[s] = auxToken(comp);
-			s++;
-			strcpy(comp,"");
-			strcpy(prev,"");
-			p=0;
-			continue;
-			// strcpy(comp,"");
-			// p = 0;
-		} else if (strstr(comp,"  ") == NULL) {
-			strcpy(prev,"");
-			dest->tokens[s] = auxToken(comp);
-		*/
